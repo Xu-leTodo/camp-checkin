@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的營隊報到憑證</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+
+  <!-- 票券卡片 -->
+  <div class="max-w-sm w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
+    <!-- 卡片頂部 -->
+    <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 text-center">
+      <p class="text-xs uppercase tracking-widest text-indigo-200 font-semibold">2026 營隊電子憑證</p>
+      <h1 class="text-2xl font-black mt-1 tracking-wide" id="ticket-camp-title">營隊報到憑證</h1>
+    </div>
+
+    <!-- 查詢或未綁定時的輸入框（若是第一次使用） -->
+    <div id="search-section" class="p-6 text-center">
+      <p class="text-sm text-gray-600 mb-4">請輸入報名時的手機號碼以領取您的專屬票券：</p>
+      <input type="tel" id="input-phone" placeholder="0912345678" class="w-full px-4 py-3 border border-gray-300 rounded-xl text-center text-lg font-bold tracking-wider mb-4 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+      <button onclick="lookupTicket()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">查詢並領取票券</button>
+    </div>
+
+    <!-- 專屬票券本體 (查詢後顯示) -->
+    <div id="ticket-content" class="p-6 text-center hidden">
+      <!-- QR Code 圖片 -->
+      <div class="bg-gray-50 p-4 rounded-2xl inline-block border border-dashed border-gray-300 mb-4">
+        <img id="qr-image" src="" alt="報到 QR Code" class="w-48 h-48 mx-auto rounded-lg">
+      </div>
+      <p class="text-xs text-gray-400 mb-4">現場集合時，請向隊輔出示此條碼</p>
+
+      <!-- 學員資料清單 -->
+      <div class="space-y-3 text-left border-t pt-4">
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-gray-400">學員姓名</span>
+          <span id="student-name" class="text-gray-800 font-bold text-lg"></span>
+        </div>
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-gray-400">所屬小隊</span>
+          <span id="student-team" class="text-indigo-600 font-bold text-base px-2 py-0.5 bg-indigo-50 rounded-md"></span>
+        </div>
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-gray-400">票券序號</span>
+          <span id="student-tid" class="text-gray-500 font-mono text-xs"></span>
+        </div>
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-gray-400">目前狀態</span>
+          <span id="student-status" class="font-bold text-sm"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const GAS_API_URL = "YOUR_GAS_WEB_APP_URL"; // 貼上你的 GAS 網址
+
+    // 從 LocalStorage 嘗試讀取已綁定的手機
+    window.onload = () => {
+      const savedPhone = localStorage.getItem('camp_student_phone');
+      if (savedPhone) {
+        document.getElementById('input-phone').value = savedPhone;
+        lookupTicket();
+      }
+    };
+
+    async function lookupTicket() {
+      const phone = document.getElementById('input-phone').value.trim();
+      if (!phone) {
+        alert("請輸入手機號碼！");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${GAS_API_URL}?action=getTicketByPhone&phone=${phone}`);
+        const data = await res.json();
+
+        if (data.found) {
+          // 記住手機號碼，下次打開免重複輸入
+          localStorage.setItem('camp_student_phone', phone);
+
+          document.getElementById('search-section').classList.add('hidden');
+          document.getElementById('ticket-content').classList.remove('hidden');
+
+          document.getElementById('student-name').innerText = data.name;
+          document.getElementById('student-team').innerText = data.team;
+          document.getElementById('student-tid').innerText = data.ticket_id;
+          
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${data.ticket_id}`;
+          document.getElementById('qr-image').src = qrUrl;
+
+          const statusElem = document.getElementById('student-status');
+          if (data.is_checked_in === '是') {
+            statusElem.innerText = "✓ 已完成報到";
+            statusElem.className = "text-green-600 font-bold";
+          } else {
+            statusElem.innerText = "尚未報到";
+            statusElem.className = "text-amber-600 font-bold";
+          }
+        } else {
+          alert("查無此手機之報名資料，請確認號碼是否正確或聯繫隊輔！");
+        }
+      } catch (err) {
+        alert("連線錯誤：" + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
