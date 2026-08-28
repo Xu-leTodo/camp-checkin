@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>營隊報到核銷系統</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+  <div class="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden p-6 text-center">
+    <div class="bg-indigo-600 text-white py-3 px-4 rounded-xl mb-6">
+      <h1 class="text-xl font-bold tracking-wide">營隊報到處．隊輔掃碼器</h1>
+      <p id="status-text" class="text-xs text-indigo-100 mt-1">系統初始化中...</p>
+    </div>
+
+    <!-- 掃描按鈕 -->
+    <button id="scan-btn" onclick="startScan()" disabled class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition-all transform active:scale-95 disabled:opacity-50 text-lg flex items-center justify-center space-x-2">
+      <svg class="w-6 h-6 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
+      開啟相機掃描 QR Code
+    </button>
+
+    <!-- 核銷結果卡片 (預設隱藏) -->
+    <div id="result-box" class="mt-6 hidden p-4 rounded-xl border text-left">
+      <div id="badge" class="inline-block px-3 py-1 rounded-full text-xs font-bold mb-2"></div>
+      <h3 id="res-name" class="text-2xl font-bold text-gray-800"></h3>
+      <p id="res-team" class="text-indigo-600 font-semibold mt-1"></p>
+      <p id="res-msg" class="text-sm text-gray-600 mt-2"></p>
+    </div>
+
+    <!-- 即時進度面板 -->
+    <div class="mt-6 pt-4 border-t border-gray-100 text-left">
+      <div class="flex justify-between text-sm font-semibold text-gray-600 mb-1">
+        <span>全營報到進度</span>
+        <span id="stat-progress">0 / 0 (0%)</span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-3">
+        <div id="progress-bar" class="bg-green-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 請填入你的設定 =====
+    const LIFF_ID = "YOUR_SCANNER_LIFF_ID"; 
+    const GAS_API_URL = "YOUR_GAS_WEB_APP_URL";
+
+    async function init() {
+      try {
+        await liff.init({ liffId: LIFF_ID });
+        document.getElementById('status-text').innerText = "系統就緒，請點擊下方掃碼";
+        document.getElementById('scan-btn').disabled = false;
+        fetchStats();
+      } catch (err) {
+        document.getElementById('status-text').innerText = "LIFF 初始化失敗: " + err.message;
+      }
+    }
+
+    async function startScan() {
+      try {
+        const res = await liff.scanCodeV2();
+        if (res.value) {
+          verifyTicket(res.value);
+        }
+      } catch (err) {
+        alert("掃碼失敗或已取消：" + err.message);
+      }
+    }
+
+    async function verifyTicket(ticketId) {
+      document.getElementById('status-text').innerText = "驗證中，請稍候...";
+      
+      try {
+        const response = await fetch(GAS_API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ ticket_id: ticketId, operator: '隊輔' })
+        });
+        const result = await response.json();
+        
+        showResult(result);
+        fetchStats(); // 重新整理進度
+      } catch (err) {
+        alert("核銷網路連線失敗：" + err.message);
+      } finally {
+        document.getElementById('status-text').innerText = "系統就緒";
+      }
+    }
+
+    function showResult(result) {
+      const box = document.getElementById('result-box');
+      const badge = document.getElementById('badge');
+      const resName = document.getElementById('res-name');
+      const resTeam = document.getElementById('res-team');
+      const resMsg = document.getElementById('res-msg');
+
+      box.classList.remove('hidden', 'bg-green-50', 'border-green-200', 'bg-red-50', 'border-red-200');
+
+      if (result.success) {
+        // 成功樣式
+        box.classList.add('bg-green-50', 'border-green-200');
+        badge.className = "inline-block px-3 py-1 rounded-full text-xs font-bold mb-2 bg-green-200 text-green-800";
+        badge.innerText = "✓ 報到成功";
+        resName.innerText = result.name;
+        resTeam.innerText = result.team;
+        resMsg.innerText = `完成時間：${result.time}`;
+      } else {
+        // 失敗/重複樣式
+        box.classList.add('bg-red-50', 'border-red-200');
+        badge.className = "inline-block px-3 py-1 rounded-full text-xs font-bold mb-2 bg-red-200 text-red-800";
+        badge.innerText = "✕ 核銷提醒";
+        resName.innerText = result.name || "未知名稱";
+        resTeam.innerText = result.team || "";
+        resMsg.innerText = result.message;
+      }
+    }
+
+    async function fetchStats() {
+      try {
+        const res = await fetch(`${GAS_API_URL}?action=getStats`);
+        const stats = await res.json();
+        document.getElementById('stat-progress').innerText = `${stats.checkedIn} / ${stats.total} (${stats.rate}%)`;
+        document.getElementById('progress-bar').style.width = `${stats.rate}%`;
+      } catch (e) {
+        console.error("載入進度失敗", e);
+      }
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
